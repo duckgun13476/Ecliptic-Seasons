@@ -740,6 +740,10 @@ public class MapChecker {
         int last_ii = 0;
         boolean shouldBreak = false;
 
+        long start = System.nanoTime();
+        long deadline = start + 5_000_000;
+        int loop = 0;
+
         while (isSmallBiome(biome)) {
 
             // if(true)break;
@@ -799,7 +803,12 @@ public class MapChecker {
                 }
             }
 
-            if (shouldBreak || i > 128) break;
+            // Prevent wander chunk too long.
+            if ((++loop & 5) == 0 && System.nanoTime() > deadline)
+                break;
+
+            if (shouldBreak || i > 128)
+                break;
         }
 
         return biome;
