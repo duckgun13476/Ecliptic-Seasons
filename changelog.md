@@ -1,3 +1,193 @@
+> As the ecosystem for 1.20.1 begins to wind down with major mods like Create moving on, we are also transitioning into
+> the final maintenance phase for our mod on this version.
+
+### 0.12.18.7
+
+- Fixed a bug that would cause the time period to be judged as dusk at the beginning of the day.
+
+### 0.12.18.6
+
+- Optimized the snowfall schedule for `Regional Snow Time` datapack.
+- Fixed a bug where the `Snow Together` data packet was not being applied.
+
+### 0.12.18.5
+
+* Removed the restriction that additional snow rendering could not be referenced without a seasonal dimension,
+  maintaining better appearance consistency.
+
+### 0.12.18.4
+
+* Fixed an issue where rendered snow could unexpectedly melt in cold biomes without rainfall.
+
+### 0.12.18.2
+
+* Optimized several rendering settings related to the extra snow layer.
+
+### 0.12.18.1
+
+* When **forced compatibility** is enabled for modded leaves that do not support Forge events, and a **random tick event
+  ** is triggered but the seasonal check fails, the leaves will now proceed with the **decay process**.
+* Fixed an issue where the **`season_textures` resource pack** did not properly support the `start_season` field.
+* Improved the **ParticleIcon detection logic** for models defined in the `season_textures` resource pack.
+
+### 0.12.18
+
+* Fixed an issue where **seasonal texture models** would not apply if in snowy status.
+* Extra snow layer rendering on leaves now only applies to the **top side of leaves**, aligning more closely with
+  vanilla behavior.
+* Snow state is now initialized by default in **extremely cold biomes**.
+
+Configuration:
+
+* Added a new option: **ExtraSnowLayerCulling**.
+* **SnowInFence** and **SnowInFenceOnlySnowy** are now **disabled by default**.
+* Added compatibility **common config synchronization support** for **EclipticSeasonsBundles**.
+
+### 0.12.17
+
+- Added model-like face culling for snow inside fences and extra snow layers, reducing z-fighting at long distances.
+
+### 0.12.16
+
+- Added an automatic configuration synchronization system that syncs all Common config files between the server and
+  client. If the client does not want their original settings to be restored after leaving a world, the enforcement
+  option can be disabled in the configuration.
+- Fixed several legacy issues.
+
+### 0.12.15
+
+- Added an optional **Extra Snow Layer** visual feature. When enabled, snowy blocks may render a thin additional snow
+  layer based on the biome’s current snow depth, making snow accumulation appear more gradual and natural across the
+  terrain. This effect works with **Sodium** and **Embeddium**.
+- Renamed the internal block tag **`snow_layer_cannot_survive_on`** to **`snow_layer_cannot_survive_in`** to better
+  reflect its purpose.
+
+### 0.12.14
+
+- Fixed several issues in Season Definitions, including deserialization errors, incorrect rule evaluation, and some
+  feature placement problems.
+
+#### 0.12.13
+
+- HeatStroke has been adjusted to a progressive count, so you won't get heatstroke immediately or for long periods of
+  time in the sun of summer.
+
+#### 0.12.12.1
+
+- Change the default for `RainTogether` in CommonConfig from false to true
+
+#### 0.12.12
+
+Update: Mixin Control Support
+
+- New Feature: Added a dedicated configuration file for Mixins.
+- Toggleable Mixins: You can now freely enable or disable specific Mixins to improve compatibility or customize your
+  experience.
+
+#### 0.12.11.5.1
+
+- Default enable datapack option `RegionalSnowTime` to align snowfall schedules based on three broad climate zones (
+  Warm, Temperate, and Cold) instead of per-biome.
+
+#### 0.12.11.5
+
+- Add option `VoxyReloadWhenSeasonChanged` to auto clean voxy cache when solar term changes.
+
+#### 0.12.11.4
+
+- Added the SimpleSeasonHud option, extracted from our debug information, intended for players who do not want to
+  install additional HUD mods. As part of maintaining a healthy community ecosystem, no extra configuration options are
+  provided.
+- Optimized the biome color update logic.
+
+#### 0.12.11.3
+
+- Fixed an issue where **SolarTermChangeEvent** could not be received on the client logic thread.
+- Aligned DH’s LOD update determination logic with that of **Voxy**.
+- Season changes now also trigger LOD updates when the relevant option is enabled.
+
+#### 0.12.11.2.1
+
+- Optimized some rendering logic for vanilla blocks such as snow connecting to fences.
+
+#### 0.12.11.2
+
+* Fixed an issue where some runtime-built snow-covered models (such as snow-covered fences) were not generated correctly
+  in Voxy rendering.
+* Added the option **VoxyLODAutoReload**. This option now determines whether to automatically refresh LOD appearances
+  based on changes in weather-related snow coverage.
+* The essence of this compatibility is invoking Voxy’s world import process. Voxy currently stores LOD build results in
+  its database, which makes direct modification of that data difficult. Adjusting the generation process of the build
+  results is comparatively easier. Therefore, LODs can now also be updated manually by running
+  `/voxy import world <world_name>` instead of relying on automatic updates. This approach reduces performance
+  requirements and mitigates update overhead for very large worlds.
+
+### 0.12.11
+
+- Optimized Voxy compatibility code again, resolving some runtime conflicts and significantly improving performance.
+
+> Note that this update may affect Voxy data. Please back up your Voxy database. If you enable the compatibility option
+> and later wish to disable or uninstall this mod, make sure to reset the Voxy database.
+
+#### 0.12.10.3
+
+- Move the Voxy test compatibility control option from Client to Common
+
+#### 0.12.10.2
+
+- Updated the code for voxy compablity.
+
+#### 0.12.10.1
+
+- Adjust the greenhouse dark-light detection logic from "sky-light only" to include "supplementary light."
+
+### 0.12.10
+
+- All configuration comments have been improved to help players better understand the purpose of each option.
+  Renaming of configuration entries will be carried out once the configuration migration system is ready.
+
+> Unfortunately, my available time for mod development will be significantly reduced in the near future. I hope these
+> recent updates can improve a large part of the overall experience.
+> If you encounter issues or compatibility problems, please provide accurate testing results and isolated test cases
+> when
+> reporting them; otherwise, I may not have sufficient time to investigate and resolve the issue.
+
+### 0.12.9
+
+- The debug information interface has been updated and refined. It has been moved to the top-left corner of the screen,
+  with a reorganized layout and the addition of rainfall probability prediction data.
+
+### 0.12.8
+
+- Smart Fence Snow Rendering: Improved snow rendering within fences. It now intelligently detects cliff edges to adjust
+  visuals accordingly, with new configuration options for precision.
+- Dynamic Accumulation & Melting: Biome-specific snow accumulation and melt speeds are now supported. Global multipliers
+  have also been added for easier overall balance control.
+- Internal Refactoring: Direct access to BiomeWeather.snowDepth is now restricted; please use the provided getter/setter
+  methods for improved data consistency.
+
+#### 0.12.7.1
+
+- New Feature with option `SnowInFence`: Vegetation Snow Allows snow to accumulate inside fences and grass, seamlessly
+  matching surrounding
+  terrain height for enhanced winter immersion.
+
+### 0.12.7
+
+- Adds the foundational code for split and cross-version support in Ecliptic Seasons: Bundles.
+  Ecliptic Seasons: Bundles provides basic DataPack and resource pack support for other biome or crop mods.
+  Contributions to add or merge additional support are welcome and greatly appreciated.
+
+### 0.12.6
+
+- Due to bloom conflicts between foggy weather and certain shader packs (such as newer versions of Photon) under
+  specific conditions, Foggy Weather is now disabled by default.
+- Experimental compatibility with Voxy has been added. This feature must be enabled in the settings and requires a
+  restart.
+  Because Voxy’s design philosophy does not allow seasonal systems to directly intervene in its rendering pipeline, a
+  special workaround is used. Please back up your world and modpack before enabling this option.
+- Fixed an initialization issue with BigGlobe when Voxy compatibility is enabled.
+
 ### 0.12.5.8
 
 - Added an option `DistantHorizonsWinterLODForceUpdateAll`, default false since it cause more performance time cost.

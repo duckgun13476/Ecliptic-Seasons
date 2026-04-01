@@ -1,13 +1,17 @@
 package com.teamtea.eclipticseasons.compat;
 
 
+import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import com.teamtea.eclipticseasons.EclipticSeasons;
 import com.teamtea.eclipticseasons.compat.theoneprobe.TOPReflector;
 import lombok.Getter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.InterModEnqueueEvent;
 import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.util.List;
 
@@ -25,6 +29,11 @@ public class CompatModule {
 
     @Getter
     private static boolean distanthorizons = false;
+    @Getter
+    private static boolean voxy = false;
+    //@Getter
+    //private static boolean voxyTest = false;
+
     /**
      * Used for mod init detect.
      **/
@@ -33,6 +42,14 @@ public class CompatModule {
         modernui = Platform.isModLoaded("modernui");
         oculus = Platform.isModLoaded("oculus");
         distanthorizons = Platform.isModLoaded("distanthorizons");
+        voxy = Platform.isModLoaded("voxy");
+        //if (isVoxy()) {
+        //    CommentedFileConfig oldConfig = CommentedFileConfig.builder(FMLPaths.CONFIGDIR.get().resolve(EclipticSeasons.defaultConfigName(ModConfig.Type.COMMON, EclipticSeasons.MODID)))
+        //            .preserveInsertionOrder().build();
+        //    oldConfig.load();
+        //    voxyTest = oldConfig.getOrElse("Compat.VoxyTest", false);
+        //    oldConfig.close();
+        //}
     }
 
     /**
@@ -53,6 +70,14 @@ public class CompatModule {
             try {
                 Class<?> iuiHandlerClass = Class.forName("com.teamtea.eclipticseasons.compat.modernui.MUIHandler");
                 gameBus.register(iuiHandlerClass.getField("INSTANCE").get(null));
+            } catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        if (isVoxy() && FMLLoader.getDist() == Dist.CLIENT) {
+            try {
+                Class<?> handler = Class.forName("com.teamtea.eclipticseasons.compat.voxy.VoxyEsHandler");
+                gameBus.register(handler.getField("INSTANCE").get(null));
             } catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException e) {
                 throw new RuntimeException(e);
             }
@@ -79,60 +104,93 @@ public class CompatModule {
         public static ForgeConfigSpec.BooleanValue fixBiome;
         public static ForgeConfigSpec.DoubleValue weatherVotePercent;
         public static ForgeConfigSpec.BooleanValue DistantHorizonsWinterLOD;
+        public static ForgeConfigSpec.BooleanValue voxyTest;
+        public static ForgeConfigSpec.BooleanValue voxyLODAutoReload;
+        public static ForgeConfigSpec.BooleanValue voxyReloadWhenSeasonChanged;
 
         public static void load(ForgeConfigSpec.Builder builder) {
             builder.push("Compat");
-            sereneSeasons = builder.comment("Compatible with mods using SereneSeasons' CropTag.")
+            sereneSeasons = builder.comment("Enables compatibility with mods that utilize Serene Seasons' CropTag system.")
                     .define("SereneSeasonsCropTag", true);
-            sereneSeasonsIgnoreSapling = builder
-                    .comment(
-                            "If true, saplings will be ignored when applying Serene Seasons crop tags.\n" +
-                                    "Set to false if you want saplings to also follow seasonal crop rules."
-                    ).define("SereneSeasonsCropTagIgnoreSapling", true);
-            sereneSeasonBasedHumidity = builder
-                    .comment(
-                            "Crops should get automatic humidity values based on seasons from Serene Season Crop Tag."
-                    ).define("SereneSeasonCropTagBasedHumidity", true);
-            modsWithoutSereneSeasonBasedHumidity = builder
-                    .comment(
-                            "A blacklist of mods whose crops should NOT get automatic humidity values based on seasons.\n" +
-                                    "Add mod IDs here to prevent seasonal humidity assignment.\n" +
-                                    "Example: [\"vinery\", \"meadow\"]"
-                    ).defineListAllowEmpty(
-                            "ModsWithoutSereneSeasonBasedHumidity", List::of,
-                            o -> o instanceof String
-                    );
-            fixBiome = builder.comment("If a mod tries to query biome precipitation using the raw method, would adjust it to correctly ignore small biomes like rivers.")
+            sereneSeasonsIgnoreSapling = builder.comment(
+                    "Excludes saplings from Serene Seasons' seasonal growth restrictions.\n" +
+                            "Set to false to force saplings to follow the same seasonal rules as crops."
+            ).define("SereneSeasonsCropTagIgnoreSapling", true);
+            sereneSeasonBasedHumidity = builder.comment(
+                    "Automatically assigns humidity requirements to crops based on their Serene Seasons seasonal tags."
+            ).define("SereneSeasonCropTagBasedHumidity", true);
+            modsWithoutSereneSeasonBasedHumidity = builder.comment(
+                    "A blacklist of Mod IDs whose crops should NOT receive automatic humidity assignments.\n" +
+                            "Example: [\"vinery\", \"meadow\"]"
+            ).defineListAllowEmpty(
+                    "ModsWithoutSereneSeasonBasedHumidity", List::of,
+                    o -> o instanceof String
+            );
+            fixBiome = builder.comment("Intercepts raw biome precipitation queries to ensure small biomes (like rivers) do not disrupt large-scale weather logic.")
                     .define("FixBiomePrecipitation", true);
-            weatherVotePercent = builder.comment("When a mod tries to query global weather parameters directly instead of using our API, " +
-                            "Solar Weather will determine the result based on a weighted vote from the areas around players.")
-                    .defineInRange("WeatherVotePercent", 0.5f, 0, 1d);
+            weatherVotePercent = builder.comment("Determines global weather state based on player locations when external mods bypass our API.\n" +
+                            "This represents the weighted threshold required to trigger a specific weather condition.")
+                    .defineInRange("WeatherVotePercent", 0.5f, 0, 1.0d);
             if (isDistanthorizons())
-                DistantHorizonsWinterLOD = builder.comment("Provides winter LOD for Distant Horizons.")
+                DistantHorizonsWinterLOD = builder.comment("Enables winter-themed Level of Detail (LOD) textures for Distant Horizons to ensure visual consistency at long distances.")
                         .define("DistantHorizonsWinterLOD", true);
+
+            if (isVoxy()) {
+                voxyTest = builder
+                        .worldRestart()
+                        .comment("""
+                                .
+                                Just for test.
+                                .""".strip()
+                        ).define("VoxyTest", false);
+
+                voxyLODAutoReload = builder
+                        //.worldRestart()
+                        .comment("""
+                                .
+                                Just for test.
+                                .""".strip()
+                        ).define("VoxyLODAutoReload", false);
+
+                voxyReloadWhenSeasonChanged = builder
+                        //.worldRestart()
+                        .comment("""
+                                .
+                                Just for test.
+                                .""".strip()
+                        ).define("VoxyReloadWhenSeasonChanged", false);
+            }
             builder.pop();
         }
     }
 
     public static class ClientConfig {
         public static ForgeConfigSpec.BooleanValue unifiedSnowyBlockShading;
+        //public static ForgeConfigSpec.BooleanValue unifiedSnowyBlockSides;
+        //public static ForgeConfigSpec.BooleanValue unifiedFrozenWater;
         public static ForgeConfigSpec.BooleanValue DistantHorizonsWinterLODForceUpdateAll;
 
         public static void load(ForgeConfigSpec.Builder builder) {
             builder.push("Compat");
             if (isOculus()) {
                 builder.push("Oculus");
-                unifiedSnowyBlockShading = builder.comment("Unify the shading and surface parameters of snow-covered blocks.")
+                unifiedSnowyBlockShading = builder.comment("Harmonizes shading parameters for all snow-covered surfaces when using shaders.")
                         .define("UnifiedSnowyBlockShading", true);
+                //unifiedSnowyBlockSides = builder.comment("Extends unified shading to the side faces of snow-covered blocks.")
+                //        .define("UnifiedSnowyBlockSides", true);
+                //unifiedFrozenWater = builder
+                //        .comment("Shader Fix: Prevents thin ice from being incorrectly flagged as 'Water' during post-processing.")
+                //        .define("UnifiedFrozenWater", false);
                 builder.pop();
             }
-            if(isDistanthorizons()){
-                DistantHorizonsWinterLODForceUpdateAll= builder
+            if (isDistanthorizons()) {
+                builder.push("DistantHorizons");
+                DistantHorizonsWinterLODForceUpdateAll = builder
                         .comment("""
-                                        Force Distant Horizons to refresh all LODs timely.
-                                        WARNING: Enabling this may cause a full LOD rebuild and significant lag spikes.""".strip()
+                                Force Distant Horizons to refresh all LODs timely.
+                                WARNING: Enabling this may cause a full LOD rebuild and significant lag spikes.""".strip()
                         ).define("DistantHorizonsWinterLODForceUpdateAll", false);
-
+                builder.pop();
             }
             builder.pop();
         }

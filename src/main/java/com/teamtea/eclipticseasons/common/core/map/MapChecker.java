@@ -22,7 +22,6 @@ import com.teamtea.eclipticseasons.config.CommonConfig;
 import net.minecraft.core.*;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.commands.LocateCommand;
 import net.minecraft.server.level.ChunkHolder;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
@@ -47,7 +46,6 @@ import org.jetbrains.annotations.NotNull;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
-import java.util.function.Predicate;
 
 public class MapChecker {
     public static final int ChunkSize = 16 * 32;
@@ -223,6 +221,13 @@ public class MapChecker {
         if (level == null) return null;
         int cx = SectionPos.blockToSectionCoord(pos.getX());
         int cz = SectionPos.blockToSectionCoord(pos.getZ());
+        ChunkAccess chunk = level.getChunkSource().getChunkNow(cx, cz);
+        return chunk != null && chunk.getStatus().isOrAfter(ChunkStatus.SURFACE) ?
+                chunk : null;
+    }
+
+    public static @Nullable ChunkAccess getChunkView(Level level, int cx, int cz) {
+        if (level == null) return null;
         ChunkAccess chunk = level.getChunkSource().getChunkNow(cx, cz);
         return chunk != null && chunk.getStatus().isOrAfter(ChunkStatus.SURFACE) ?
                 chunk : null;
@@ -925,8 +930,7 @@ public class MapChecker {
         if (!CommonConfig.Debug.snowOverlayGlowingBlock.get()
                 && state.getLightEmission(level, pos) > 0) {
             flag = FLAG_NONE;
-        } else if (!CommonConfig.Debug.disableSnowOverlayControlTag.get()
-                && state.is(EclipticBlockTags.SNOW_OVERLAY_CANNOT_SURVIVE_ON)) {
+        } else if (state.is(EclipticBlockTags.SNOW_OVERLAY_CANNOT_SURVIVE_ON)) {
             flag = FLAG_NONE;
         } else if (state.getBlock().builtInRegistryHolder().key().location().getNamespace().equals("snowrealmagic"))
             return MapChecker.FLAG_NONE;
@@ -954,8 +958,10 @@ public class MapChecker {
                 onBlock instanceof ComposterBlock ||
                 (onBlock instanceof CampfireBlock && !state.getValue(CampfireBlock.LIT)) ||
                 onBlock instanceof IronBarsBlock ||
-                onBlock instanceof LightningRodBlock ||
-                onBlock instanceof AzaleaBlock) {
+                onBlock instanceof LightningRodBlock
+                //||
+                //onBlock instanceof AzaleaBlock
+        ) {
             flag = FLAG_CUSTOM;
         } else {
             ResourceLocation blockName = onBlock.builtInRegistryHolder().key().location();

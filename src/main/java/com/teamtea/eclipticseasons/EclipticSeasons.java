@@ -1,7 +1,7 @@
 package com.teamtea.eclipticseasons;
 
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import com.teamtea.eclipticseasons.api.EclipticSeasonsApi;
 import com.teamtea.eclipticseasons.common.block.IceOrSnowCauldronBlock;
 import com.teamtea.eclipticseasons.common.registry.*;
 import com.teamtea.eclipticseasons.compat.CompatModule;
@@ -9,6 +9,7 @@ import com.teamtea.eclipticseasons.config.ClientConfig;
 import com.teamtea.eclipticseasons.common.network.SimpleNetworkHandler;
 import com.teamtea.eclipticseasons.config.CommonConfig;
 import com.teamtea.eclipticseasons.data.start;
+import com.teamtea.eclipticseasons.compat.eclipticseasons_bundles.EclipticSeasonsBundles;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.data.event.GatherDataEvent;
@@ -18,7 +19,6 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -126,25 +126,31 @@ public class EclipticSeasons {
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, CommonConfig.COMMON_CONFIG);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ClientConfig.CLIENT_CONFIG);
 
-        CommentedFileConfig oldConfig =CommentedFileConfig.builder(FMLPaths.CONFIGDIR.get().resolve(defaultConfigName(ModConfig.Type.COMMON,MODID)))
-                .preserveInsertionOrder().build();
-        oldConfig.load();
-        int LastingDaysOfEachTerm = oldConfig.getOrElse("Season.LastingDaysOfEachTerm", 5);
-
-
         // CompatModule.init();
 
         CompatModule.register(MinecraftForge.EVENT_BUS, modEventBus);
 
         ModAdvancements.register();
+
+        EclipticSeasonsBundles.init();
     }
-    private static String defaultConfigName(ModConfig.Type type, String modId) {
+
+    public static String defaultConfigName(ModConfig.Type type, String modId) {
         // config file name would be "forge-client.toml" and "forge-server.toml"
         return String.format(Locale.ROOT, "%s-%s.toml", modId, type.extension());
     }
 
+    public static String configName(String type) {
+        // config file name would be "forge-client.toml" and "forge-server.toml"
+        return String.format(Locale.ROOT, "%s/%s.toml", EclipticSeasonsApi.MODID, type);
+    }
+
     public static ResourceLocation rl(String id) {
         return new ResourceLocation(MODID, id);
+    }
+
+    public static ResourceLocation erl(String modid, String id) {
+        return new ResourceLocation(modid, id);
     }
 
     public void FMLCommonSetup(final FMLCommonSetupEvent event) {

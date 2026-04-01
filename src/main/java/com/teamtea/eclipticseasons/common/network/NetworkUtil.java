@@ -1,33 +1,30 @@
 package com.teamtea.eclipticseasons.common.network;
 
+import com.teamtea.eclipticseasons.api.constant.solar.SolarTerm;
 import com.teamtea.eclipticseasons.api.data.craft.HumidityControl;
 import com.teamtea.eclipticseasons.api.data.weather.special_effect.WeatherEffect;
+import com.teamtea.eclipticseasons.api.event.SolarTermChangeEvent;
 import com.teamtea.eclipticseasons.api.misc.IChunkBiomeHolder;
 import com.teamtea.eclipticseasons.client.color.season.BiomeColorsHandler;
 import com.teamtea.eclipticseasons.client.core.ClientWeatherChecker;
-import com.teamtea.eclipticseasons.client.render.WorldRenderer;
 import com.teamtea.eclipticseasons.client.util.ClientCon;
 import com.teamtea.eclipticseasons.common.core.SolarHolders;
 import com.teamtea.eclipticseasons.common.core.biome.BiomeRainDispatcher;
 import com.teamtea.eclipticseasons.common.core.biome.WeatherManager;
 import com.teamtea.eclipticseasons.common.core.map.BiomeHolder;
-import com.teamtea.eclipticseasons.common.core.map.ChunkInfoMap;
-import com.teamtea.eclipticseasons.common.core.map.MapChecker;
 import com.teamtea.eclipticseasons.common.network.message.*;
 import com.teamtea.eclipticseasons.common.registry.ESRegistries;
 import com.teamtea.eclipticseasons.config.ClientConfig;
-import net.minecraft.client.Minecraft;
+import com.teamtea.eclipticseasons.config.ESConfigSync;
 import net.minecraft.core.Registry;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.SectionPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.network.HandshakeHandler;
+import net.minecraftforge.network.HandshakeMessages;
 import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkEvent;
 
@@ -37,11 +34,12 @@ import java.util.function.Supplier;
 public class NetworkUtil {
 
     public static Level getClient() {
-        return Minecraft.getInstance().level;
+        return ClientCon.getUseLevel();
     }
 
     public static Player getPlayer() {
-        return Minecraft.getInstance().player;
+        return ClientCon.getAgent().getCameraEntity() instanceof Player player ?
+                player : null;
     }
 
     public static boolean processSolarTermsMessage(SolarTermsMessage solarTermsMessage, Supplier<NetworkEvent.Context> context) {
@@ -51,10 +49,19 @@ public class NetworkUtil {
 
                 SolarHolders.getSaveDataLazy(NetworkUtil.getClient()).ifPresent(data ->
                         {
+                            SolarTerm old = data.getSolarTerm();
                             data.setSolarTermsDay(solarTermsMessage.solarDay);
+                            SolarTerm solarTerm = data.getSolarTerm();
+                            if (solarTerm != old) {
+                                MinecraftForge.EVENT_BUS.post(new SolarTermChangeEvent(old, solarTerm, getClient(), data.getSolarTermsDay()));
+                                ClientCon.getAgent().setChange(true);
+                            }
                             // BiomeClimateManager.updateTemperature(NetworkUtil.getClient(), data.getSolarTerm());
                             BiomeColorsHandler.needRefresh = true;
                             ClientCon.tick(getClient());
+                            if (solarTerm != old) {
+                                ClientCon.getAgent().setAllChunkDirty();
+                            }
                         }
                 );
             }
@@ -71,19 +78,26 @@ public class NetworkUtil {
                 Registry<WeatherEffect> weatherEffects = level.registryAccess().registryOrThrow(ESRegistries.WEATHER_EFFECT);
                 var lists = WeatherManager.getBiomeList(NetworkUtil.getClient());
                 if (lists != null) {
+                    boolean update = false;
                     for (WeatherManager.BiomeWeather biomeWeather : lists) {
                         if (biomeWeatherMessage.rain[biomeWeather.id] == 0
                                 && biomeWeather.rainTime > 0) {
                             ClientWeatherChecker.addLastRainyBiome(biomeWeather.biomeHolder.value(), (long) (1 / ClientWeatherChecker.getRate()));
                         }
+                        if (!update
+                            //&& biomeWeather.rainTime + biomeWeather.clearTime + biomeWeather.thunderTime > 0
+                        )
+                            update = biomeWeather.getSnowDepth() != biomeWeatherMessage.snowDepth[biomeWeather.id];
                         biomeWeather.rainTime = biomeWeatherMessage.rain[biomeWeather.id] * 10000;
                         biomeWeather.clearTime = biomeWeatherMessage.clear[biomeWeather.id] * 10000;
                         biomeWeather.thunderTime = biomeWeatherMessage.thuder[biomeWeather.id] * 10000;
-                        biomeWeather.snowDepth = biomeWeatherMessage.snowDepth[biomeWeather.id];
+                        biomeWeather.setSnowDepth(biomeWeatherMessage.snowDepth[biomeWeather.id]);
                         biomeWeather.effect = weatherEffects.getHolder(biomeWeatherMessage.special[biomeWeather.id]).orElse(null);
                         biomeWeather.setBiomeRain(BiomeRainDispatcher.getBiomeRain(
                                 level instanceof ServerLevel, biomeWeatherMessage.weather[biomeWeather.id]));
                     }
+                    if (update)
+                        ClientCon.agent.setChange(true);
                 }
             }
         });
@@ -94,12 +108,10 @@ public class NetworkUtil {
         context.get().enqueueWork(() ->
         {
             if (context.get().getDirection() == NetworkDirection.PLAY_TO_CLIENT) {
-                // note 观察是否更新正常
                 if (ClientConfig.Renderer.resetRendererAfterSleep.get()) {
-                    Minecraft.getInstance().levelRenderer.allChanged();
+                    ClientCon.getAgent().setAllRendererChanged();
                 } else {
-                    if (Minecraft.getInstance().cameraEntity instanceof LivingEntity livingEntity)
-                        WorldRenderer.setAllDirty(SectionPos.of(livingEntity.getOnPos()));
+                    ClientCon.getAgent().setAllChunkDirty();
                 }
             }
 
@@ -195,4 +207,24 @@ public class NetworkUtil {
         return true;
     }
 
+    public static boolean processConfigSync(SimpleNetworkHandler.S2CConfigData msg, Supplier<NetworkEvent.Context> contextSupplier) {
+        contextSupplier.get().enqueueWork(() -> {
+            ESConfigSync.INSTANCE.receiveSyncedConfig(msg, contextSupplier);
+            contextSupplier.get().setPacketHandled(true);
+            SimpleNetworkHandler.CHANNEL.reply(new SimpleNetworkHandler.C2SAcknowledge(), contextSupplier.get());
+        });
+        return true;
+    }
+
+
+    //public static boolean handleClientAck2(SimpleNetworkHandler.C2SAcknowledge c2SAcknowledge, Supplier<NetworkEvent.Context> contextSupplier) {
+    //    contextSupplier.get().enqueueWork(() -> {
+    //        contextSupplier.get().setPacketHandled(true);
+    //    });
+    //    return true;
+    //}
+
+    public static void handleClientAck(HandshakeHandler handshakeHandler, SimpleNetworkHandler.C2SAcknowledge c2SAcknowledge, Supplier<NetworkEvent.Context> contextSupplier) {
+        contextSupplier.get().setPacketHandled(true);
+    }
 }

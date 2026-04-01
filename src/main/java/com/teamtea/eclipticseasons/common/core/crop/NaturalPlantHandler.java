@@ -94,7 +94,8 @@ public class NaturalPlantHandler {
             ThreadLocal.withInitial(ISeasonChangeContext::of);
 
     public static void tickBlock(ServerLevel level, BlockPos pos, BlockState state) {
-        if (CommonConfig.isSeasonDefinition()) {
+        //if (CommonConfig.isSeasonDefinition())
+        {
             SolarTerm nowSolarTerm = EclipticUtil.getNowSolarTerm(level);
             if (nowSolarTerm.isValid()) {
                 var mapMap = SEASON_DEFINITIONS.getOrDefault(state.getBlock(), null);
@@ -148,7 +149,7 @@ public class NaturalPlantHandler {
                                     var blockStatePlaced = selectorsed.get(j);
                                     if (!blockStatePlaced.shouldApply(level, pos, context)) continue;
                                     weightIndex -= blockStatePlaced.getWeight();
-                                    if (weightIndex <= 0) {
+                                    if (weightIndex < 0) {
                                         chosen = blockStatePlaced;
                                         break;
                                     }

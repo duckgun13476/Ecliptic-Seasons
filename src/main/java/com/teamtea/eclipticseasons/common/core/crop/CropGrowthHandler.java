@@ -51,6 +51,7 @@ import net.minecraft.world.level.*;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.*;
 import net.minecraft.world.level.levelgen.Heightmap;
@@ -717,6 +718,20 @@ public final class CropGrowthHandler {
                     }
                 }
             }
+
+            if (flag == CANCEL
+                    && event instanceof CanPlantGrowEvent canPlantGrowEvent
+                    && CommonConfig.Crop.cropLeavesPatch.get()
+                    && canPlantGrowEvent.getLevel() instanceof ServerLevel level){
+                BlockState state = canPlantGrowEvent.getState();
+                if (state.getBlock() instanceof LeavesBlock
+                        && !state.getValue(LeavesBlock.PERSISTENT)
+                        && state.getValue(LeavesBlock.DISTANCE) == 7) {
+                    BlockPos pos = canPlantGrowEvent.getPos();
+                    Block.dropResources(state, level, pos);
+                    level.removeBlock(pos, false);
+                }
+            }
         }
     }
 
@@ -850,7 +865,8 @@ public final class CropGrowthHandler {
     public static boolean isInRoom(LevelAccessor level, BlockPos pos, BlockState state, Optional<HolderSet<Block>> notCheck) {
         // if (state.getFluidState().isSource()) return false;
 
-        boolean isInLight = level.getBrightness(LightLayer.SKY, pos.above()) > 12;
+        BlockPos abovePos = pos.above();
+        boolean isInLight = level.getBrightness(LightLayer.SKY, abovePos) > 12;
         if (isInLight) {
             int height = level.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX(), pos.getZ());
             if (height < pos.getY()) return false;
@@ -897,7 +913,8 @@ public final class CropGrowthHandler {
 
         if (isConnected && !isInLight) {
             if (level.getRandom().nextInt(10000) <= CommonConfig.Crop.darkGreenhouseFailChance.get()) {
-                isConnected = state.is(EclipticBlockTags.DARK_GROW_PLANTS);
+                isConnected = state.is(EclipticBlockTags.DARK_GROW_PLANTS)
+                        || level.getRawBrightness(abovePos, 0) > 12;
             }
         }
         return isConnected;

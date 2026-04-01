@@ -153,6 +153,9 @@ minecraft {
             property 'forgegradle.runs.runData', 'true'
             property 'forgegradle.runs.dev', 'true'
 
+
+            property 'eclipticseasons.runs.runData', 'true'
+
             mods {
                 "${mod_id}" {
                     source sourceSets.main
@@ -167,8 +170,8 @@ tasks.named('processResources', Copy) {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 
     doFirst {
-        def langDir = file('src/main/resources/assets/eclipticseasons/lang')
-        def genDir = file('src/generated/resources/assets/eclipticseasons/lang')
+        def langDir = file("src/main/resources/assets/${mod_id}/lang")
+        def genDir = file("src/generated/resources/assets/${mod_id}/lang")
 
         def langFiles = ['en_us.json', 'zh_cn.json']
 
@@ -192,7 +195,7 @@ tasks.named('processResources', Copy) {
     }
 
     doLast {
-        def genDir = file('src/generated/resources/assets/eclipticseasons/lang')
+        def genDir = file("src/generated/resources/assets/${mod_id}/lang")
         def langFiles = ['en_us.json', 'zh_cn.json']
 
         langFiles.each { fileName ->
@@ -283,6 +286,9 @@ dependencies {
     compileOnly fg.deobf("libs:fabric-renderer-api-v1:3.2.1+cf68abbe77")
     compileOnly fg.deobf("libs:fabric-renderer-indigo:1.5.2+b5b2da4177")
 
+//    compileOnly fg.deobf("libs:voxy:0.2.7-alpha")
+//    compileOnly fg.deobf("libs:BigGlobe:5.2.0-MC1.20.1")
+
     compileOnly fg.deobf("curse.maven:embeddium-908741:5681725")
     compileOnly fg.deobf("curse.maven:oculus-581495:6020952")
 
@@ -297,7 +303,7 @@ dependencies {
     // Real mod deobf dependency examples - these get remapped to your current mappings
     // implementation fg.deobf("com.tterrag.registrate:Registrate:MC${mc_version}-${registrate_version}") // Adds registrate as a dependency
 
-    onlyMainRuntimeOnly fg.deobf("curse.maven:farmers-delight-398521:5051242")
+    compileOnly fg.deobf("curse.maven:farmers-delight-398521:5051242")
 
     compileOnly fg.deobf("curse.maven:distant-horizons-508933:7097100")
 //    onlyMainRuntimeOnly fg.deobf("curse.maven:distant-horizons-508933:7097100")
@@ -305,7 +311,7 @@ dependencies {
     compileOnly fg.deobf("curse.maven:improperui-forged-1209983:6362682")
 
     compileOnly fg.deobf("curse.maven:modern-ui-352491:6956345")
-    onlyMainRuntimeOnly fg.deobf("curse.maven:modern-ui-352491:6956345")
+//    onlyMainRuntimeOnly fg.deobf("curse.maven:modern-ui-352491:6956345")
 //    onlyMainRuntimeOnly fg.deobf("curse.maven:cloth-config-348521:5729105")
 //    onlyMainRuntimeOnly fg.deobf("curse.maven:architectury-api-419699:5137938")
 //    onlyMainRuntimeOnly fg.deobf("curse.maven:stevesrealisticsleep-616330:5962707")

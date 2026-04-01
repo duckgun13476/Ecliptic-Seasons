@@ -1,5 +1,6 @@
 package com.teamtea.eclipticseasons.client.core;
 
+import com.teamtea.eclipticseasons.api.constant.tag.EclipticBlockTags;
 import com.teamtea.eclipticseasons.api.data.client.model.ESModelLoadedJson;
 import com.teamtea.eclipticseasons.api.data.client.model.ModelResolver;
 import com.teamtea.eclipticseasons.api.data.client.model.ModelTester;
@@ -7,6 +8,7 @@ import com.teamtea.eclipticseasons.api.data.client.model.seasonal.SeasonBlockDef
 import com.teamtea.eclipticseasons.api.data.client.model.seasonal.SeasonalTexture;
 import com.teamtea.eclipticseasons.api.data.season.SnowDefinition;
 import com.teamtea.eclipticseasons.api.misc.client.IExtraRendererContextOwner;
+import com.teamtea.eclipticseasons.api.misc.client.IFakeSnowHolder;
 import com.teamtea.eclipticseasons.api.misc.client.IMapSlice;
 import com.teamtea.eclipticseasons.api.misc.client.IMapSliceProvider;
 import com.teamtea.eclipticseasons.api.util.EclipticUtil;
@@ -15,6 +17,7 @@ import com.teamtea.eclipticseasons.client.model.unbake.SolarBlockModel;
 import com.teamtea.eclipticseasons.client.reload.ClientJsonCacheListener;
 import com.teamtea.eclipticseasons.client.util.ClientCon;
 import com.teamtea.eclipticseasons.client.util.ClientRef;
+import com.teamtea.eclipticseasons.common.core.biome.WeatherManager;
 import com.teamtea.eclipticseasons.common.core.snow.SnowChecker;
 import com.teamtea.eclipticseasons.common.registry.BlockRegistry;
 import com.teamtea.eclipticseasons.client.model.*;
@@ -23,12 +26,13 @@ import com.teamtea.eclipticseasons.compat.Platform;
 import com.teamtea.eclipticseasons.config.ClientConfig;
 
 import com.teamtea.eclipticseasons.config.CommonConfig;
+import it.unimi.dsi.fastutil.HashCommon;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.block.BlockModelShaper;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.block.model.BlockModel;
-import net.minecraft.client.renderer.block.model.FaceBakery;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
@@ -37,6 +41,7 @@ import net.minecraft.client.resources.model.UnbakedModel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.inventory.InventoryMenu;
@@ -44,11 +49,13 @@ import net.minecraft.world.level.*;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraftforge.client.ChunkRenderTypeSet;
 import net.minecraftforge.client.model.data.ModelData;
 import com.teamtea.eclipticseasons.EclipticSeasons;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.function.BiConsumer;
@@ -58,9 +65,12 @@ import java.util.stream.IntStream;
 public class ExtraModelManager {
 
     public static Map<ResourceLocation, BakedModel> models;
-    public static ModelResourceLocation snowOverlayLeaves = new ModelResourceLocation(BlockRegistry.snowyLeaves.getId(), "");
-    public static ModelResourceLocation snowySlabBottom = new ModelResourceLocation(BlockRegistry.snowySlab.getId(), "type=bottom,waterlogged=false");
-    public static ModelResourceLocation snowOverlayBlock = new ModelResourceLocation(BlockRegistry.snowyBlock.getId(), "");
+    public static ModelResourceLocation snowOverlayLeaves;
+    //= new ModelResourceLocation(BlockRegistry.snowyLeaves.getId(), "");
+    public static ModelResourceLocation snowySlabBottom;
+    //= new ModelResourceLocation(BlockRegistry.snowySlab.getId(), "type=bottom,waterlogged=false");
+    public static ModelResourceLocation snowOverlayBlock;
+    //= new ModelResourceLocation(BlockRegistry.snowyBlock.getId(), "");
 
     public static ResourceLocation ice = EclipticSeasons.rl("block/ice");
 
@@ -137,7 +147,7 @@ public class ExtraModelManager {
     public static Map<BlockState, BakedModel> snowyModelsCache2 = new IdentityHashMap<>();
 
 
-    public static BakedModel getSnowyModel(BlockState state, BlockState snowState, int flag, int offset) {
+    public static @Nullable BakedModel getSnowyModel(BlockState state, BlockState snowState, int flag, int offset) {
 
         boolean notSpecialLeaves = !(
                 (MapChecker.leaveLike(flag))
@@ -252,8 +262,12 @@ public class ExtraModelManager {
         return Minecraft.getInstance().getTextureAtlas(InventoryMenu.BLOCK_ATLAS).apply(resourceLocation);
     }
 
-    public static List<BakedQuad> cancelTop(BakedModel bakedModel, BlockAndTintGetter blockAndTintGetter, BlockState state, BlockPos pos, Direction direction, RandomSource random, long seed, List<BakedQuad> original) {
-        ExtraRendererContext rendererHolder = IExtraRendererContextOwner.of(blockAndTintGetter);
+    public static List<BakedQuad> cancelTop(@Nullable BakedModel bakedModel, @Nonnull BlockAndTintGetter blockAndTintGetter, @Nonnull BlockState state, @Nonnull BlockPos pos, @Nullable Direction direction, @Nonnull RandomSource random, long seed, @Nonnull List<BakedQuad> original) {
+        return cancelTop(IExtraRendererContextOwner.of(blockAndTintGetter), bakedModel, blockAndTintGetter, state, pos, direction, random, seed, original);
+    }
+
+    // TODO：关于覆盖cutout面的问题，似乎可以给纹理加一个半透明像素，然后用cutout渲染就能正常覆盖了
+    public static List<BakedQuad> cancelTop(@Nonnull ExtraRendererContext rendererHolder, @Nullable BakedModel bakedModel, @Nonnull BlockAndTintGetter blockAndTintGetter, @Nonnull BlockState state, @Nonnull BlockPos pos, @Nullable Direction direction, @Nonnull RandomSource random, long seed, @Nonnull List<BakedQuad> original) {
         if (rendererHolder.getExtraModel() == null) return original;
 
         if (bakedModel != null
@@ -960,6 +974,261 @@ public class ExtraModelManager {
         return replace;
     }
 
+    private static final Direction[] SNOW_LAYER_DIRECTIONS_TO_CHECK = {
+            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
+    private static final BlockPos[] SNOW_LAYER_DIRECTIONS_TO_CHECK_4 = {
+            new BlockPos(1, 0, 0),
+            new BlockPos(-1, 0, 0),
+            new BlockPos(0, 0, 1),
+            new BlockPos(0, 0, -1)
+    };
+
+    private static final BlockPos[] SNOW_LAYER_DIRECTIONS_TO_CHECK_8 = {
+            new BlockPos(1, 0, 0),
+            new BlockPos(-1, 0, 0),
+            new BlockPos(0, 0, 1),
+            new BlockPos(0, 0, -1),
+            new BlockPos(1, 0, 1),
+            new BlockPos(1, 0, -1),
+            new BlockPos(-1, 0, 1),
+            new BlockPos(-1, 0, -1)
+    };
+
+    public static BakedModel shouldRenderedWithSnowInside(
+            BlockAndTintGetter blockAndTintGetter, BlockPos pos, BlockState state,
+            @Nullable BlockPos.MutableBlockPos checkPos) {
+        int layers = getRenderedLevelWithSnowInside(blockAndTintGetter, pos, state, checkPos);
+        return layers > 0 ? getSnowLayerModel(layers) : null;
+    }
+
+    public static int getRenderedLevelWithSnowInside(
+            BlockAndTintGetter blockAndTintGetter, BlockPos pos, BlockState state,
+            @Nullable BlockPos.MutableBlockPos checkPos) {
+
+        if (!ClientConfig.Renderer.snowInFence.get()) return 0;
+        Level useLevel = ClientCon.getUseLevel();
+        if (!(blockAndTintGetter instanceof IMapSlice mapSlice)
+                || useLevel == null) return 0;
+
+        mapSlice.setLevelForFakeSnow(pos, 0);
+
+        if (blockAndTintGetter.getBrightness(LightLayer.SKY, pos) == 0) {
+            return 0;
+        }
+
+        if (checkPos == null) checkPos = posToMutable(pos);
+        else checkPos.set(pos.getX(), pos.getY(), pos.getZ());
+
+        //checkPos.move(Direction.UP);
+
+        if (state.isAir() || !state.getFluidState().isEmpty() || state.is(EclipticBlockTags.SNOW_LAYER_CANNOT_SURVIVE_IN))
+            return 0;
+        if (ClientConfig.Renderer.snowInFenceOnlySnowy.get()
+                && !maySnowyAt(useLevel, mapSlice, state, pos, useLevel.getRandom(), state.getSeed(pos))) {
+            return 0;
+        }
+
+        BlockState belowState = blockAndTintGetter.getBlockState(checkPos.setY(pos.getY() - 1));
+        if (belowState.is(BlockTags.SNOW_LAYER_CANNOT_SURVIVE_ON)) {
+            return 0;
+        } else {
+            if (!belowState.is(BlockTags.SNOW_LAYER_CAN_SURVIVE_ON)
+                    && !(Block.isFaceFull(belowState.getCollisionShape(blockAndTintGetter, checkPos), Direction.UP)
+                    || belowState.is(Blocks.SNOW) && belowState.getValue(SnowLayerBlock.LAYERS) == 8))
+                return 0;
+        }
+
+
+        int snowNearbyCount = 0;
+        int airNeighborCount = 0;
+        int minLayers = 8;
+
+        var directions = ClientConfig.Renderer.snowInFenceDirection.get() ?
+                SNOW_LAYER_DIRECTIONS_TO_CHECK_8 : SNOW_LAYER_DIRECTIONS_TO_CHECK_4;
+
+        for (var dir : directions) {
+            checkPos.set(pos.getX() + dir.getX(), pos.getY() + dir.getY(), pos.getZ() + dir.getZ());
+            BlockState neighborState = blockAndTintGetter.getBlockState(checkPos);
+
+            if (neighborState.isAir()) {
+                checkPos.move(Direction.DOWN);
+                if (!blockAndTintGetter.getBlockState(checkPos).blocksMotion()) {
+                    airNeighborCount++;
+                }
+                continue;
+            }
+
+            int currentNeighborLayers = 0;
+            if (neighborState.getBlock() == Blocks.SNOW) {
+                currentNeighborLayers = neighborState.getValue(SnowLayerBlock.LAYERS);
+            } else if (neighborState.getBlock() == Blocks.SNOW_BLOCK) {
+                currentNeighborLayers = 8;
+            }
+
+            if (currentNeighborLayers > 0) {
+                snowNearbyCount++;
+                if (currentNeighborLayers < minLayers) {
+                    minLayers = currentNeighborLayers;
+                }
+            }
+        }
+
+        int baseRequired = ClientConfig.Renderer.snowInFenceCount.get();
+        int dynamicRequired = Math.max(1, baseRequired - airNeighborCount);
+
+        if (snowNearbyCount >= dynamicRequired) {
+            if (state.isCollisionShapeFullBlock(blockAndTintGetter, pos)
+                    || state.isFaceSturdy(blockAndTintGetter, pos, Direction.DOWN)) return 0;
+
+            mapSlice.setLevelForFakeSnow(pos, minLayers);
+            return minLayers;
+        }
+
+        return 0;
+    }
+
+
+    public static BakedModel getSnowLayerModel(int layers) {
+        int clampedLayers = Mth.clamp(layers, 1, 8);
+        BlockState snowState = Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, clampedLayers);
+        return Minecraft.getInstance().getModelManager().getBlockModelShaper().getBlockModel(snowState);
+    }
+
+
+    public static BlockState shouldBlockAsSnowyState(BlockState state, BlockAndTintGetter blockAndTintGetter, BlockPos.MutableBlockPos mutableBlockPos) {
+        if (!ClientConfig.Renderer.snowInFence.get()) return state;
+        //if (!state.blocksMotion() || !state.getFluidState().isEmpty())
+        //    return state;
+        if (!(state.getBlock() instanceof SnowyDirtBlock)) return state;
+        int y = mutableBlockPos.getY();
+        mutableBlockPos.setY(y + 1);
+        BlockState blockState = blockAndTintGetter.getBlockState(mutableBlockPos);
+        BakedModel bm = ExtraModelManager.shouldRenderedWithSnowInside(blockAndTintGetter, mutableBlockPos, blockState, null);
+        if (bm != null) {
+            if (state.hasProperty(BlockStateProperties.SNOWY)) {
+                state = state.setValue(BlockStateProperties.SNOWY, true);
+            }
+        }
+        mutableBlockPos.setY(y);
+        return state;
+    }
+
+    public static int getLayer(BlockAndTintGetter blockAndTintGetter, BlockPos.MutableBlockPos pos, BlockState state, BakedModel snowModel, long seed) {
+        if (!(blockAndTintGetter instanceof IMapSlice mapSlice) || !ClientConfig.Renderer.extraSnowLayer.get())
+            return 0;
+        if (mapSlice.getBlockHeight(pos) != pos.getY()
+                && mapSlice.getSolidBlockHeight(pos) != pos.getY()) return 0;
+        //if (mapSlice.getBlockHeight(pos) > pos.getY()) return 0;
+
+        int realY = pos.getY() + 1;
+
+        // Avoid cache lookup here;
+        // Coordinate traversal makes snow priority undefined and may break face culling.
+
+        mapSlice.setLevelForFakeSnow(pos.getX(), realY, pos.getZ(), 0);
+
+        if (MapChecker.getDefaultBlockTypeFlag(state) <= MapChecker.FLAG_NONE) return 0;
+        Level useLevel = ClientCon.getUseLevel();
+        if (useLevel == null) return 0;
+
+        if (!(state.isSolidRender(blockAndTintGetter, pos) || state.getBlock() instanceof LeavesBlock)) return 0;
+        if (!state.getFluidState().isEmpty()) return 0;
+
+        BlockPos abovePos = pos.setY(pos.getY() + 1);
+        BlockState aboveState = blockAndTintGetter.getBlockState(abovePos);
+        if (!aboveState.getFluidState().isEmpty()) return 0;
+        if (aboveState.getBlock() instanceof LeavesBlock || aboveState.isFaceSturdy(blockAndTintGetter, abovePos, Direction.DOWN) || aboveState.is(EclipticBlockTags.SNOW_LAYER_CANNOT_SURVIVE_IN))
+            return 0;
+        if (!((snowModel != null && !ISnowyReplaceModel.isInvalid(snowModel)) || maySnowyAt(useLevel, mapSlice, state, pos, null, seed)))
+            return 0;
+
+        if (!notTooBright(blockAndTintGetter, mapSlice, pos)) return 0;
+
+        var biome = MapChecker.idToBiome(useLevel, mapSlice.getSurfaceFaceBiomeId(pos));
+        if (biome == null) return 0;
+
+        int snowDepth = Mth.clamp(WeatherManager.getSnowDepthAtBiome(useLevel, biome.value()), 0, 100);
+        if (snowDepth <= 0) return 0;
+
+        final long posLong = pos.asLong();
+        long h = (posLong ^ seed) * 0x5DEECE66DL + 0xBL;
+        h = (h ^ (h >>> 16)) * 0x27D4EB2DL;
+        h = h ^ (h >>> 15);
+        int noiseInt = (int) (h & 0x7FFFFFFF) % 100;
+
+        int maxLayers = (state.getBlock() instanceof LeavesBlock) ?
+                ClientConfig.Renderer.extraSnowLayerMaxLayersOnLeaves.get() :
+                ClientConfig.Renderer.extraSnowLayerMaxLayers.get();
+
+        int base = 0;
+        int chance;
+
+        if (snowDepth < 50) {
+            chance = (snowDepth > 40) ? 1 : 0;
+        } else if (snowDepth <= 65) {
+            int x = snowDepth - 49;
+            chance = (x * x * x * x) / 1050;
+        } else if (snowDepth <= 85) {
+            base = 1;
+            chance = (snowDepth - 65) / 2;
+        } else {
+            base = 1;
+            int x = snowDepth - 85;
+            chance = 10 + (x * x * 90) / 225;
+        }
+
+        if (noiseInt < chance) base++;
+
+        int minLayers = Mth.clamp(base, 0, maxLayers);
+        mapSlice.setLevelForFakeSnow(pos.getX(), realY, pos.getZ(), minLayers);
+        return minLayers;
+    }
+
+    public static BlockState getFakeBlockState(BlockState original, BlockState selfState, BlockGetter view, BlockPos.MutableBlockPos otherPos, BlockPos selfPos, Direction facing) {
+        if (facing == Direction.DOWN
+                || !(view instanceof BlockAndTintGetter getter)
+                || !(view instanceof IMapSlice mapSlice)
+                || !(ClientConfig.Renderer.extraSnowLayerCulling.get())
+                || mapSlice.getBlockHeight(selfPos) > selfPos.getY()) return original;
+
+        boolean snowInFence = ClientConfig.Renderer.snowInFence.get();
+        boolean extraSnowLayer = ClientConfig.Renderer.extraSnowLayer.get();
+        if (!snowInFence && !extraSnowLayer) return original;
+
+
+        boolean notUp = facing != Direction.UP;
+        boolean snowSelf = !selfState.is(Blocks.SNOW);
+        if (snowSelf || notUp) {
+
+            int cacheLevel = mapSlice.getLevelForFakeSnow(otherPos);
+            if (cacheLevel > IFakeSnowHolder.NONE_CHECK_FAKE_SNOW_LEVEL)
+                return cacheLevel == 0 ? original :
+                        Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, cacheLevel);
+
+            int y = otherPos.getY();
+            if (snowInFence) {
+                int x = otherPos.getX();
+                int z = otherPos.getZ();
+                int snowInsideLevel = ExtraModelManager.getRenderedLevelWithSnowInside(getter, otherPos, original, null);
+                otherPos.set(x, y, z);
+                if (snowInsideLevel > 0) {
+                    return Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, snowInsideLevel);
+                }
+                otherPos.set(x, y, z);
+            }
+
+            if (extraSnowLayer) {
+                otherPos.setY(y - 1);
+                BlockState belowState = !notUp ? selfState : view.getBlockState(otherPos);
+                int layer = ExtraModelManager.getLayer(getter, otherPos, belowState, null, belowState.getSeed(otherPos));
+                otherPos.setY(y);
+                if (layer > 0)
+                    return Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, layer);
+            }
+        }
+        return original;
+    }
+
     public static RenderType getRenderType(BlockState state) {
         // if (!Minecraft.useFancyGraphics()) return RenderType.solid();
         // RenderType chunkRenderType = ItemBlockRenderTypes.getChunkRenderType(state);
@@ -995,7 +1264,7 @@ public class ExtraModelManager {
                 || isModelReplaceable(flag);
     }
 
-    private static boolean isModelReplaceable(int flag) {
+    public static boolean isModelReplaceable(int flag) {
         return flag == MapChecker.FLAG_GRASS
                 || flag == MapChecker.FLAG_GRASS_LARGE;
     }
@@ -1023,6 +1292,12 @@ public class ExtraModelManager {
         if (ClientCon.getUseLevel() != null) {
             ClientRef.updateClientSide(ClientCon.getUseLevel().registryAccess());
         }
+        snowOverlayLeaves = BlockModelShaper.stateToModelLocation(BlockRegistry.snowyLeaves.get().defaultBlockState());
+        snowySlabBottom = BlockModelShaper.stateToModelLocation(BlockRegistry.snowySlab.get().defaultBlockState()
+                .setValue(SlabBlock.TYPE, SlabType.BOTTOM)
+                .setValue(SlabBlock.WATERLOGGED, false)
+        );
+        snowOverlayBlock = BlockModelShaper.stateToModelLocation(BlockRegistry.snowyBlock.get().defaultBlockState());
     }
 
     public static final Map<ResourceLocation, ESModelLoadedJson> extraSnowModels = new HashMap<>(1024);
